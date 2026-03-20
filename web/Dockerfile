@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install dependencies
 COPY web/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install -i https://mirrors.aliyun.com/pypi/simple --no-cache-dir -r requirements.txt
 
 # Copy app code
 COPY web/ .
