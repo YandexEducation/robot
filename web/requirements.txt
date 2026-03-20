@@ -1,0 +1,6 @@
+tensorflow
+flask
+pillow
+numpy
+werkzeug
+pyserial

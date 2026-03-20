@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Olympic Robot v4.0 — Симулятор и Робот</title>
+    <script src="vendor/jszip.min.js"></script>
+    <script src="vendor/FileSaver.min.js"></script>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #ffe066 0%, #ff9a7b 100%);
+            min-height: 100vh;
+            padding: 12px;
+            margin: 0;
+        }
+        
+        .container {
+            max-width: 100%;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            overflow: hidden;
+            display: grid;
+            grid-template-rows: auto auto 1fr;
+            min-height: calc(100vh - 24px);
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #ffe066 0%, #ff9a7b 100%);
+            color: #333;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+        
+        .header h1 { font-size: 1.6em; margin: 0; color: #333; }
+        .header p { opacity: 0.85; font-size: 0.95em; margin: 0; color: #333; }
+        
+        .tab-nav {
+            display: flex;
+            gap: 8px;
+        }
+        .tab-btn {
+            padding: 10px 20px;
+            border: 2px solid rgba(0,0,0,0.3);
+            border-radius: 10px;
+            background: rgba(255,255,255,0.3);
+            color: #333;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 0.95em;
+            transition: all 0.3s;
+        }
+        .tab-btn:hover { background: rgba(255,255,255,0.5); }
+        .tab-btn.active { background: #555; color: #ffe066; border-color: #555; }
+        
+        .tab-content { display: none; min-height: 0; overflow: hidden; }
+        .tab-content.active { display: block; }
+        
+        /* Shared script section */
+        .shared-script-section {
+            padding: 16px 24px;
+            background: #f0f4f8;
+            border-bottom: 1px solid #e0e0e0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 16px;
+            align-items: flex-start;
+        }
+        .shared-script-section h3 { font-size: 1em; margin: 0 0 8px 0; color: #333; }
+        .shared-script-upload {
+            flex-shrink: 0;
+            background: white;
+            border-radius: 10px;
+            padding: 12px 16px;
+            border: 2px dashed #ffe066;
+            min-width: 200px;
+        }
+        .shared-script-upload.dragover { background: #fffbf0; border-color: #ff9a7b; }
+        .shared-script-editor {
+            flex: 1;
+            min-width: 300px;
+        }
+        .shared-script-editor textarea {
+            width: 100%;
+            min-height: 120px;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-family: monospace;
+            font-size: 13px;
+            resize: vertical;
+        }
+        .shared-script-editor textarea:focus { border-color: #ffe066; outline: none; }
+        .shared-script-hint { font-size: 0.85em; color: #666; margin-top: 4px; }
+        
+        /* Simulator layout */
+        .sim-content {
+            display: grid;
+            grid-template-columns: 280px 1fr 260px;
+            gap: 0;
+            min-height: calc(100vh - 120px);
+            /* Убираем жёсткое ограничение высоты, даём странице прокручиваться */
+            /* max-height: calc(100vh - 120px); */
+            overflow: auto;
+        }
+        
+        .panel-left, .panel-right {
+            padding: 20px;
+            background: #f8f9fa;
+            border-right: 1px solid #e0e0e0;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+        .panel-right { border-right: none; border-left: 1px solid #e0e0e0; }
+        
+        .panel-center {
+            padding: 16px;
+            overflow: auto;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 0;
+        }
+        
+        .upload-section {
+            background: white;
+            border-radius: 12px;
+            padding: 16px;
+            border: 2px dashed #ffe066;
+            text-align: center;
+        }
+        .upload-section.dragover { background: #fffbf0; border-color: #ff9a7b; }
+        .upload-section h2 { font-size: 1em; margin-bottom: 8px; color: #333; }
+        .upload-section p { font-size: 0.85em; color: #666; margin: 0 0 12px 0; }
+        
+        .file-input-wrapper { position: relative; display: inline-block; }
+        .file-input-wrapper input[type="file"] { position: absolute; opacity: 0; width: 100%; height: 100%; cursor: pointer; }
+        .file-input-button {
+            display: inline-block;
+            padding: 10px 24px;
+            background: #ff9a7b;
+            color: #333;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .file-input-button:hover { background: #ffe066; color: #333; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(255, 154, 123, 0.5); }
+        
+        .file-info { padding: 10px 12px; background: white; border-radius: 8px; font-size: 0.85em; display: none; border: 1px solid #e0e0e0; }
+        .file-info.show { display: block; }
+        .file-info strong { color: #e85a3a; }
+        
+        .actions { display: flex; flex-direction: column; gap: 10px; }
+        .action-button {
+            padding: 14px 16px;
+            border: none;
+            border-radius: 10px;
+            font-size: 0.95em;
+            font-weight: bold;
+            color: white;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        .action-button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .action-button.simulator { background: linear-gradient(135deg, #ffe066 0%, #ff9a7b 100%); color: #333; }
+        .action-button.simulator:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(255, 224, 102, 0.5); color: #333; }
+        .action-button#btnMapEditor { background: #555; color: #ffe066; }
+        .action-button#btnMapEditor:hover { background: #333; color: #ffe066; }
+        
+        .section-title { font-size: 0.9em; font-weight: bold; color: #555; margin-bottom: 4px; }
+        
+        .status { padding: 12px; border-radius: 8px; font-size: 0.9em; display: none; flex-shrink: 0; }
+        .status.show { display: block; }
+        .status.success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .status.error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .status.info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+        
+        .tips-box { background: white; border-radius: 8px; padding: 12px; font-size: 0.8em; color: #555; border: 1px solid #e8e8e8; }
+        .tips-box ul { margin: 8px 0 0 0; padding-left: 18px; }
+        .tips-box li { margin-bottom: 4px; }
+        .tips-box kbd { background: #eee; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+        
+        .sensor-panel { background: #f0f4f8; border-radius: 10px; padding: 12px; font-size: 0.85em; border: 1px solid #e0e0e0; margin-bottom: 12px; }
+        .sensor-panel:empty { display: none; }
+        .sensor-panel-title { font-weight: bold; color: #e85a3a; margin-bottom: 8px; font-size: 1em; }
+        .sensor-panel-section { font-weight: bold; color: #555; margin-top: 10px; margin-bottom: 4px; font-size: 0.9em; }
+        .sensor-panel-section:first-of-type { margin-top: 0; }
+        .sensor-row { display: flex; justify-content: space-between; margin-bottom: 2px; }
+        .sensor-row span { color: #666; }
+        .sensor-row strong { color: #333; }
+        
+        .simulator-container { display: none; width: 100%; flex: 1; min-height: 0; flex-direction: column; align-items: center; }
+        .simulator-container.show { display: flex; }
+        .simulator-canvas-wrap { max-width: 100%; max-height: calc(100vh - 220px); aspect-ratio: 800/600; flex-shrink: 0; }
+        #simulatorCanvas { border: 3px solid #ffe066; border-radius: 12px; background: #f0f0f0; width: 100%; height: 100%; display: block; }
+        .simulator-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; margin-top: 12px; }
+        .simulator-controls button { padding: 8px 14px; border: none; border-radius: 8px; background: #ff9a7b; color: #333; cursor: pointer; font-size: 0.9em; }
+        .simulator-controls button:hover { background: #ffe066; color: #333; }
+        #btnRobotButton { font-size: 1.05em; padding: 10px 24px; background: #ffe066; color: #333; border-radius: 12px; font-weight: bold; }
+        #btnRobotButton:hover { background: #ff9a7b; color: #fff; }
+        .simulator-controls .hint-text { width: 100%; margin-top: 6px; font-size: 0.8em; color: #666; text-align: center; }
+        
+        .placeholder-center { display: flex; flex-direction: column; align-items: center; justify-content: center; color: #999; font-size: 0.95em; text-align: center; padding: 24px; }
+        .placeholder-center .icon { font-size: 3em; margin-bottom: 12px; }
+        .placeholder-center.hide { display: none !important; }
+        
+        .map-editor-container { display: none; width: 100%; background: #f8f9fa; border-radius: 12px; padding: 16px; border: 2px solid #ffe066; flex: 1; min-height: 0; flex-direction: column; }
+        .map-editor-container.show { display: flex; }
+        .map-editor-container h2 { font-size: 1.1em; margin-bottom: 10px; }
+        .map-editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 12px; }
+        .map-editor-toolbar .tool-btn { padding: 8px 12px; border: 2px solid #ffe066; border-radius: 8px; background: white; color: #555; cursor: pointer; font-weight: bold; font-size: 0.85em; }
+        .map-editor-toolbar .tool-btn:hover, .map-editor-toolbar .tool-btn.active { background: #ffe066; color: #333; border-color: #ffe066; }
+        .map-editor-canvas-wrap { max-width: 100%; max-height: calc(100vh - 260px); aspect-ratio: 800/600; flex-shrink: 0; }
+        #mapEditorCanvas { border: 3px solid #ffe066; border-radius: 8px; background: #fff; cursor: crosshair; width: 100%; height: 100%; display: block; }
+        
+        /* Robot tab styles (unified) */
+        .robot-content { padding: 20px; overflow-y: auto; }
+        .robot-status { margin-bottom: 15px; padding: 12px; background: #f0f4f8; border-radius: 10px; text-align: center; border: 1px solid #e0e0e0; }
+        .robot-actions-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-bottom: 8px; }
+        .robot-actions-row button { padding: 10px 20px; border: none; border-radius: 8px; background: linear-gradient(135deg, #ffe066 0%, #ff9a7b 100%); color: #333; font-weight: bold; cursor: pointer; transition: all 0.3s; }
+        .robot-actions-row button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(255, 224, 102, 0.5); }
+        .robot-actions-row button:disabled { opacity: 0.5; cursor: not-allowed; background: #999; color: #fff; }
+        .robot-actions-hint { font-size: 0.9em; color: #666; text-align: center; margin-bottom: 20px; }
+        .script-upload-status { max-width: 400px; margin: 0 auto 16px; padding: 12px; background: #f8f9fa; border-radius: 10px; border: 1px solid #e0e0e0; }
+        .script-upload-progress-wrap { height: 8px; background: #e0e0e0; border-radius: 4px; overflow: hidden; margin-bottom: 8px; }
+        .script-upload-progress-bar { height: 100%; background: linear-gradient(90deg, #ffe066, #ff9a7b); border-radius: 4px; width: 0%; transition: width 0.2s; }
+        .script-upload-msg { font-size: 0.9em; color: #555; text-align: center; }
+        .script-upload-status.success .script-upload-progress-bar { background: #4caf50; }
+        .script-upload-status.error .script-upload-progress-bar { background: #e85a3a; }
+        .recovery-section { margin: 12px 0; padding: 12px; background: #fff8f0; border: 1px solid #ff9a7b; border-radius: 10px; }
+        .recovery-section summary { cursor: pointer; color: #555; font-weight: bold; }
+        .recovery-hint { font-size: 0.9em; color: #666; margin: 8px 0 10px 0; }
+        .recovery-section button { padding: 8px 16px; background: #ff9a7b; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
+        .recovery-section button:hover:not(:disabled) { background: #e85a3a; }
+        .recovery-section button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .robot-controls { display: flex; gap: 20px; flex-wrap: wrap; }
+        .robot-panel {
+            border: 2px solid #e0e0e0;
+            padding: 20px;
+            border-radius: 12px;
+            flex: 1;
+            min-width: 300px;
+            background: #fafafa;
+        }
+        .robot-panel h2 { border-bottom: 2px solid #ffe066; padding-bottom: 10px; margin-top: 0; color: #333; }
+        .robot-panel button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 8px;
+            background: linear-gradient(135deg, #ffe066 0%, #ff9a7b 100%);
+            color: #333;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .robot-panel button:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 4px 12px rgba(255, 204, 0, 0.5); }
+        .robot-panel button:disabled { opacity: 0.5; cursor: not-allowed; background: #999; color: #fff; }
+        .robot-panel button.record { background: #ff9a7b; color: #fff; }
+        .robot-panel button.record:active { opacity: 0.9; }
+        .robot-panel .video-wrap {
+            width: 288px; height: 288px;
+            margin: 10px auto 20px;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            background: #222;
+            border: 2px solid #ffe066;
+            border-radius: 12px;
+        }
+        #video-canvas { width: 96px; height: 96px; image-rendering: pixelated; transform: scale(3); transform-origin: top center; filter: contrast(1.15) brightness(1.4); }
+        .robot-panel textarea { width: 100%; padding: 10px; border-radius: 8px; border: 2px solid #e0e0e0; font-family: monospace; }
+        .class-btn-group { display: flex; flex-direction: column; gap: 5px; }
+        .sample-count { font-size: 0.9em; color: #666; margin-left: 10px; }
+        .robot-sensor-panel { margin: 15px 0; padding: 15px; background: #f0f4f8; border-radius: 10px; border: 1px solid #e0e0e0; }
+        .robot-sensor-panel h3 { margin: 0 0 10px 0; font-size: 1em; color: #495057; }
+        .sensor-grid { display: flex; flex-wrap: wrap; gap: 15px 25px; }
+        .sensor-item { display: flex; gap: 8px; align-items: center; }
+        .sensor-label { color: #6c757d; font-size: 0.9em; }
+        .sensor-value { font-weight: bold; font-family: monospace; color: #212529; min-width: 100px; }
+        .camera-settings { margin-top: 10px; padding: 10px; border-radius: 10px; background: #f0f4f8; border: 1px solid #e0e0e0; font-size: 0.9em; }
+        .camera-settings h3 { margin: 0 0 8px 0; font-size: 1em; color: #495057; }
+        .camera-settings .cam-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+        .camera-settings label { font-size: 0.9em; color: #555; }
+        .camera-settings input[type="range"] { flex: 1; min-width: 120px; }
+        .camera-settings .cam-value { width: 22px; text-align: center; font-family: monospace; }
+        
+        @media (max-width: 1024px) { .sim-content { grid-template-columns: 1fr 240px; } }
+        @media (max-width: 768px) { .sim-content { grid-template-columns: 1fr; grid-template-rows: auto auto 1fr; } }
+
+        /* Лог отладки: общий блок, вывод в столбик */
+        .debug-log-section {
+            padding: 12px 24px;
+            background: #f8f9fa;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .debug-log-section summary {
+            cursor: pointer;
+            font-weight: 600;
+            color: #495057;
+            font-size: 0.95em;
+            user-select: none;
+        }
+        .debug-log-box {
+            margin-top: 8px;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid #dee2e6;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.04);
+            background: #1e1e1e;
+        }
+        #debug-log {
+            display: block;
+            width: 100%;
+            max-height: 220px;
+            overflow-y: auto;
+            padding: 12px 14px;
+            font-family: 'Consolas', 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.65;
+            color: #e0e0e0;
+            white-space: pre-wrap;
+            word-break: break-word;
+            margin: 0;
+            border: none;
+            resize: none;
+        }
+        #debug-log:empty {
+            color: #6c757d;
+            font-style: italic;
+        }
+        #debug-log:empty::before {
+            content: 'Лог пуст. Запустите симулятор или подключите робота.';
+        }
+        .debug-log-actions {
+            margin-top: 6px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .debug-log-actions button {
+            padding: 6px 12px;
+            font-size: 12px;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+            background: #fff;
+            color: #495057;
+            cursor: pointer;
+        }
+        .debug-log-actions button:hover {
+            background: #f0f4f8;
+            border-color: #ffe066;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div>
+                <h1>🤖 Olympic Robot v4.0</h1>
+            </div>
+            <nav class="tab-nav">
+                <button class="tab-btn active" data-tab="simulator">🎮 Симулятор</button>
+                <button class="tab-btn" data-tab="robot">🔌 Робот</button>
+            </nav>
+        </div>
+        
+        <div class="shared-script-section" id="sharedScriptSection">
+            <div class="shared-script-upload" id="uploadSection">
+                <h3>📁 user_script.py</h3>
+                <div class="file-input-wrapper">
+                    <input type="file" id="fileInput" accept=".py">
+                    <div class="file-input-button">Выбрать файл</div>
+                </div>
+                <div class="file-info" id="fileInfo">
+                    <strong>Файл:</strong> <span id="fileName"></span><br>
+                    <strong>Размер:</strong> <span id="fileSize"></span> байт
+                </div>
+            </div>
+            <div class="shared-script-editor">
+                <textarea id="script-area" spellcheck="false" placeholder="def run_robot(bot):&#10;    # Ваш код здесь...&#10;    while True:&#10;        bot.motors.move(50, 50)&#10;        yield bot.sleep(0.1)">def run_robot(bot):
+    print("Robot started! Press Start button to begin.")
+    while True:
+        bot.motors.move(50, 50)
+        yield bot.sleep(0.1)
+</textarea>
+            </div>
+        </div>
+
+        <!-- Общий лог отладки (симулятор + робот) -->
+        <div class="debug-log-section">
+            <details open>
+                <summary>📋 Лог отладки</summary>
+                <div class="debug-log-box">
+                    <pre id="debug-log"></pre>
+                </div>
+                <div class="debug-log-actions">
+                    <button type="button" id="debug-log-clear">Очистить</button>
+                </div>
+            </details>
+        </div>
+        
+        <!-- Tab: Simulator -->
+        <div id="tab-simulator" class="tab-content active">
+            <div class="sim-content">
+                <div class="panel-left">
+                    <div class="upload-section" id="mapUploadSection">
+                        <h2>🗺 Загрузка карты</h2>
+                        <div class="file-input-wrapper">
+                            <input type="file" id="mapFileInput" accept=".json,application/json">
+                            <div class="file-input-button">Выбрать карту</div>
+                        </div>
+                        <div class="file-info" id="mapFileInfo">
+                            <strong>Карта:</strong> <span id="mapFileName"></span>
+                        </div>
+                    </div>
+                    <div class="actions">
+                        <button class="action-button simulator" id="btnSimulator" disabled>🎮 Запустить симулятор</button>
+                        <button class="action-button" id="btnMapEditor">🗺 Редактор карты</button>
+                    </div>
+                </div>
+                <div class="panel-center">
+                    <div class="placeholder-center" id="placeholderCenter">
+                        <span class="icon">🤖</span>
+                        <p>Загрузите скрипт и карту, затем нажмите «Запустить симулятор».</p>
+                    </div>
+                    <div class="simulator-container" id="simulatorContainer">
+                        <div class="simulator-canvas-wrap">
+                            <canvas id="simulatorCanvas" width="800" height="600"></canvas>
+                        </div>
+                        <div class="simulator-controls">
+                            <button id="btnReset">🔄 Сброс</button>
+                            <button id="btnRobotButton">🔘 Старт</button>
+                            <button id="btnClose">✖ Закрыть</button>
+                            <p class="hint-text">Симулятор сам запускает скрипт. Нажмите «Старт» для начала.</p>
+                        </div>
+                        <p class="hint-text" style="margin-top:8px; font-size:0.9em; color:#666;">Сообщения <code>bot.log()</code> выводятся в общий «Лог отладки» выше.</p>
+                    </div>
+                    <div class="map-editor-container" id="mapEditorContainer">
+                        <h2>🗺 Редактор карты</h2>
+                        <div class="map-editor-toolbar">
+                            <button type="button" class="tool-btn active" data-tool="pencil" id="toolPencil">✏️ Полосы</button>
+                            <button type="button" class="tool-btn" data-tool="line" id="toolLine">📏 Прямая</button>
+                            <button type="button" class="tool-btn" data-tool="class0" id="toolClass0">Class0</button>
+                            <button type="button" class="tool-btn" data-tool="class1" id="toolClass1">Class1</button>
+                            <button type="button" class="tool-btn" data-tool="class2" id="toolClass2">Class2</button>
+                            <button type="button" class="tool-btn" data-tool="sharp" id="toolSharp">📡 Sharp</button>
+                            <button type="button" class="tool-btn" data-tool="eraser" id="toolEraser">🧹 Ластик</button>
+                            <button type="button" class="tool-btn" data-tool="start" id="toolStart">🤖 Старт</button>
+                            <span>Угол:</span>
+                            <input type="number" id="startAngle" min="0" max="360" value="90" style="width: 48px;">°
+                            <span>Кисть:</span>
+                            <input type="range" id="brushSize" min="4" max="40" value="12" style="width: 80px;">
+                            <span id="brushSizeLabel">12</span>px
+                            <button type="button" class="tool-btn" id="btnEditorClear">🗑 Очистить</button>
+                            <button type="button" class="tool-btn" id="btnEditorSave" style="background: #ffe066; color: #333; border-color: #ffe066;">💾 Сохранить</button>
+                            <button type="button" class="tool-btn" id="btnEditorSaveFile" style="background: #ff9a7b; color: #fff; border-color: #ff9a7b;">📤 Сохранить в файл</button>
+                            <button type="button" class="tool-btn" id="btnEditorLoadFile" style="background: #555; color: #ffe066; border-color: #555;">📂 Загрузить карту</button>
+                            <input type="file" id="loadMapInput" accept=".json,application/json" style="display: none;">
+                            <button type="button" class="tool-btn" id="btnEditorClose">✖ Закрыть</button>
+                        </div>
+                        <div class="map-editor-canvas-wrap">
+                            <canvas id="mapEditorCanvas" width="800" height="600"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="panel-right">
+                    <div class="section-title">Статус</div>
+                    <div class="status" id="status"></div>
+                    <div id="sensorPanel" class="sensor-panel" aria-label="Показания датчиков симулятора"></div>
+                    <div class="tips-box">
+                        <strong>Подсказки v4.0</strong>
+                        <ul>
+                            <li><strong>Функция входа:</strong> Используйте <code>def run_robot(bot):</code></li>
+                            <li><strong>Задержки:</strong> Вызов <code>bot.sleep(seconds)</code></li>
+                            <li><strong>Совместимость:</strong> Код работает одинаково в браузере и на реальном роботе</li>
+                            <li>Карта из редактора подхватывается симулятором после «Сохранить»</li>
+                            <li>«Сохранить в файл» — скачать карту в JSON; «Загрузить карту» — загрузить другую версию карты</li>
+                            <li><strong>Редактор карты:</strong> Черные полосы — линия для датчиков и препятствия для Sharp. Ластик — зажать и вести. Зоны Class0/Class1/Class2 — детекция камеры. Старт — клик задаёт позицию (0° вправо, 90° вверх).</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tab: Robot -->
+        <div id="tab-robot" class="tab-content">
+            <div class="robot-content">
+                <div class="robot-status" id="connection-status">Статус: Отключено</div>
+                <div class="robot-auth-row" style="margin:10px 0; display:flex; gap:16px; align-items:center; flex-wrap:wrap;">
+                    <label>Имя робота: <input type="text" id="robot-name" placeholder="OlympicRobot_01" maxlength="32" style="width:140px; padding:6px;"></label>
+                    <label>Пароль: <input type="password" id="robot-password" placeholder="1234" maxlength="32" style="width:100px; padding:6px;"></label>
+                </div>
+                <p class="hint-text" style="margin:10px 0; font-size:0.9em; color:#666;">Лог отладки (BLE, загрузка скрипта) — в общем блоке «Лог отладки» выше.</p>
+                <div class="robot-actions-row">
+                    <button id="connect-btn">Подключить (BLE)</button>
+                    <button id="connect-all-btn" style="font-size:0.85em; background:#666; color:#ffe066;" title="Показать все BLE устройства">Показать все устройства</button>
+                    <button id="disconnect-ble-btn" disabled style="display:none;">Отключить (BLE)</button>
+                    <button id="stream-toggle-btn" disabled>Запустить видео</button>
+                    <button id="upload-script-btn" disabled>Загрузить скрипт на робота</button>
+                </div>
+                <div id="script-upload-status" class="script-upload-status" style="display: none;">
+                    <div class="script-upload-progress-wrap">
+                        <div class="script-upload-progress-bar" id="script-upload-progress"></div>
+                    </div>
+                    <div class="script-upload-msg" id="script-upload-msg"></div>
+                </div>
+                <details class="recovery-section">
+                    <summary>🔄 Восстановление</summary>
+                    <p class="recovery-hint">Переподключитесь по BLE и нажмите кнопку ниже.</p>
+                    <button id="upload-recovery-btn" disabled>Загрузить скрипт восстановления</button>
+                </details>
+
+                <div class="robot-sensor-panel" id="sensor-panel" style="display: none;">
+                    <h3>Данные сенсоров</h3>
+                    <div class="sensor-grid">
+                        <div class="sensor-item"><span class="sensor-label">Камера (знак):</span><span class="sensor-value" id="sensor-sign">—</span></div>
+                        <div class="sensor-item"><span class="sensor-label">Линия L/C/R:</span><span class="sensor-value" id="sensor-line">—</span></div>
+                        <div class="sensor-item"><span class="sensor-label">Энкодеры L/R:</span><span class="sensor-value" id="sensor-encoders">—</span></div>
+                        <div class="sensor-item"><span class="sensor-label">Sharp:</span><span class="sensor-value" id="sensor-sharp">—</span></div>
+                        <div class="sensor-item"><span class="sensor-label">Версия скрипта (байт):</span><span class="sensor-value" id="sensor-script-version">—</span></div>
+                    </div>
+                </div>
+
+                <div class="robot-controls">
+                    <div class="robot-panel">
+                        <h2>1. Сбор данных</h2>
+                        <div class="video-wrap">
+                            <canvas id="video-canvas" width="96" height="96"></canvas>
+                        </div>
+                        <div class="camera-settings" id="camera-settings" style="display:none;">
+                            <h3>Настройки камеры (OV2640)</h3>
+                            <div class="cam-row">
+                                <label for="cam-brightness">Яркость</label>
+                                <input type="range" id="cam-brightness" min="-2" max="2" step="1">
+                                <span class="cam-value" id="cam-brightness-value">0</span>
+                            </div>
+                            <div class="cam-row">
+                                <label for="cam-contrast">Контраст</label>
+                                <input type="range" id="cam-contrast" min="-2" max="2" step="1">
+                                <span class="cam-value" id="cam-contrast-value">0</span>
+                            </div>
+                            <div class="cam-row">
+                                <label for="cam-ae-level">Экспозиция</label>
+                                <input type="range" id="cam-ae-level" min="-2" max="2" step="1">
+                                <span class="cam-value" id="cam-ae-level-value">0</span>
+                            </div>
+                            <div class="cam-row">
+                                <label><input type="checkbox" id="cam-exposure-auto" checked> Автоэкспозиция</label>
+                                <label><input type="checkbox" id="cam-gain-auto" checked> Автоусиление</label>
+                                <label><input type="checkbox" id="cam-wb-auto" checked> Баланс белого (AWB)</label>
+                            </div>
+                        </div>
+                        <div id="dataset-controls">
+                            <h3>Запись сэмплов (выходы модели: Class0 / Class1 / Class2)</h3>
+                            <div class="class-btn-group">
+                                <div><button class="record" onclick="recordSample(0)">Class0</button><span id="count-0" class="sample-count">0 samples</span></div>
+                                <div><button class="record" onclick="recordSample(1)">Class1</button><span id="count-1" class="sample-count">0 samples</span></div>
+                                <div><button class="record" onclick="recordSample(2)">Class2</button><span id="count-2" class="sample-count">0 samples</span></div>
+                            </div>
+                            <br>
+                            <button onclick="downloadDatasetZip()">Скачать датасет (ZIP)</button>
+                            <button onclick="clearDataset()" style="background: #555; color: #ffe066;">Очистить всё</button>
+                        </div>
+                        <div style="margin-top: 20px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
+                            <h3>2. Обучение и развёртывание</h3>
+                            <button id="train-server-btn" style="background: linear-gradient(135deg, #ffe066 0%, #ff9a7b 100%); color: #333;">Обучить на сервере</button>
+                            <div id="train-status" style="margin-top: 5px; font-weight: bold; color: #555;"></div>
+                            <hr style="margin: 15px 0;">
+                            <p>После обучения скачайте модель и загрузите на робота (например, через Serial Monitor или скрипт <code>tools/upload_model.py</code>).</p>
+                            <div style="display:flex; gap:8px; flex-wrap:wrap; align-items:center;">
+                                <a href="#" id="download-model-link" style="display:none">Скачать model.tflite</a>
+                            </div>
+                            <div id="upload-status" style="margin-top: 5px; font-weight: bold;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/pyodide/v0.24.1/full/pyodide.js"></script>
+    <script src="simulator/simulator.js"></script>
+    <script src="simulator/map-editor.js"></script>
+    <script src="simulator/simulator-ui.js"></script>
+    <script src="simulator/main.js"></script>
+    <script>
+        // Tab switching
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const tab = btn.dataset.tab;
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById('tab-' + tab).classList.add('active');
+            });
+        });
+
+        // Robot panel JS (BLE, training, etc.)
+        const logToServer = (level, msg) => {
+            fetch('/api/log', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({level, msg}) }).catch(()=>{});
+        };
+        const debugLog = (tag, ...args) => {
+            const el = document.getElementById('debug-log');
+            if (el) {
+                const line = `[${new Date().toLocaleTimeString()}] [${tag}] ${args.map(a=>typeof a==='object'?JSON.stringify(a):String(a)).join(' ')}\n`;
+                el.textContent += line;
+                el.scrollTop = el.scrollHeight;
+            }
+        };
+        document.getElementById('debug-log-clear').addEventListener('click', () => {
+            const el = document.getElementById('debug-log');
+            if (el) { el.textContent = ''; }
+        });
+        const DBG = (tag, ...args) => { console.log(`[Robot:${tag}]`, ...args); debugLog(tag, ...args); };
+        const DBG_WARN = (tag, ...args) => { console.warn(`[Robot:${tag}]`, ...args); debugLog('WARN:'+tag, ...args); };
+        const DBG_ERR = (tag, ...args) => { console.error(`[Robot:${tag}]`, ...args); debugLog('ERR:'+tag, ...args); logToServer('ERR', `[${tag}] ${args.map(a=>String(a)).join(' ')}`); };
+        DBG('Init', 'Готов');
+
+        const SERVICE_UUID = "19b10000-e8f2-537e-4f6c-d104768a1214";
+        const CHAR_SCRIPT_UUID = "19b10001-e8f2-537e-4f6c-d104768a1214";
+        const CHAR_SIGN_UUID = "19b10002-e8f2-537e-4f6c-d104768a1214";
+        const CHAR_IMAGE_UUID = "19b10003-e8f2-537e-4f6c-d104768a1214";
+        const CHAR_STREAM_UUID = "19b10005-e8f2-537e-4f6c-d104768a1214";
+        const CHAR_SENSORS_UUID = "19b10006-e8f2-537e-4f6c-d104768a1214";
+        const CHAR_AUTH_UUID = "19b10007-e8f2-537e-4f6c-d104768a1214";
+        const CHAR_CAMERA_UUID = "19b10008-e8f2-537e-4f6c-d104768a1214";
+
+        let device, server, service;
+        let scriptChar, signChar, imageChar, streamChar, sensorsChar, authChar, cameraChar;
+        const IMG_W = 96, IMG_H = 96;
+        const canvas = document.getElementById('video-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let dataset = { 0: [], 1: [], 2: [], 3: [], 4: [] };
+
+        document.getElementById('connect-btn').addEventListener('click', async () => {
+            try {
+                DBG('BLE', 'Requesting device...');
+                const robotName = (document.getElementById('robot-name')?.value || '').trim();
+                // Избегаем бага Chromium: namePrefix + services в одном фильтре могут не находить устройство.
+                // Используем отдельные фильтры (OR-логика): либо по имени, либо по сервису.
+                const requestOptions = robotName
+                    ? { filters: [{ namePrefix: robotName }, { services: [SERVICE_UUID] }], optionalServices: [SERVICE_UUID] }
+                    : { filters: [{ services: [SERVICE_UUID] }] };
+                device = await navigator.bluetooth.requestDevice(requestOptions);
+                DBG('BLE', 'Device selected:', device.name || device.id);
+                device.addEventListener('gattserverdisconnected', onDisconnected);
+                document.getElementById('connection-status').innerText = "Статус: Подключение...";
+                server = await device.gatt.connect();
+                DBG('BLE', 'GATT connected');
+                await new Promise(r => setTimeout(r, 500));
+                service = await server.getPrimaryService(SERVICE_UUID);
+                DBG('BLE', 'Service found');
+                scriptChar = await service.getCharacteristic(CHAR_SCRIPT_UUID);
+                signChar = await service.getCharacteristic(CHAR_SIGN_UUID);
+                imageChar = await service.getCharacteristic(CHAR_IMAGE_UUID);
+                streamChar = await service.getCharacteristic(CHAR_STREAM_UUID);
+                try { sensorsChar = await service.getCharacteristic(CHAR_SENSORS_UUID); } catch(e) { sensorsChar = null; }
+                try { authChar = await service.getCharacteristic(CHAR_AUTH_UUID); } catch(e) { authChar = null; }
+                try { cameraChar = await service.getCharacteristic(CHAR_CAMERA_UUID); } catch(e) { cameraChar = null; }
+                DBG('BLE', 'Characteristics: script, sign, image, stream'
+                    + (authChar ? ', auth' : '')
+                    + (cameraChar ? ', camera' : ''));
+                if (authChar) {
+                    const pwd = (document.getElementById('robot-password')?.value || '').trim();
+                    await authChar.writeValue(new TextEncoder().encode(pwd));
+                    const result = await authChar.readValue();
+                    if (result.getUint8(0) !== 1) {
+                        server.disconnect();
+                        authChar = null;
+                        throw new Error('Неверный пароль. Проверьте пароль робота.');
+                    }
+                    DBG('BLE', 'Auth OK');
+                }
+                streamChar.addEventListener('characteristicvaluechanged', onStreamData);
+                await streamChar.startNotifications();
+                signPollInterval = setInterval(() => { pollSign(); pollSensors(); }, 500);
+                document.getElementById('sensor-panel').style.display = 'block';
+                document.getElementById('connection-status').innerText = "Статус: Подключено (BLE)";
+                document.getElementById('upload-script-btn').disabled = false;
+                document.getElementById('upload-recovery-btn').disabled = false;
+                document.getElementById('connect-btn').disabled = true;
+                document.getElementById('connect-all-btn').disabled = true;
+                document.getElementById('disconnect-ble-btn').disabled = false;
+                document.getElementById('disconnect-ble-btn').style.display = 'inline-block';
+                document.getElementById('stream-toggle-btn').disabled = false;
+                initCameraControls();
+                DBG('BLE', 'Connected OK');
+                logToServer('INFO', 'BLE connected');
+            } catch (error) {
+                DBG_ERR('BLE', error);
+                alert("Ошибка подключения: " + error);
+            }
+        });
+
+        document.getElementById('connect-all-btn').addEventListener('click', async () => {
+            try {
+                if (!navigator.bluetooth) {
+                    alert("Web Bluetooth не поддерживается. Используйте Chrome или Edge. В Brave: brave://flags → включите Web Bluetooth.");
+                    return;
+                }
+                if (!window.isSecureContext) {
+                    alert("Web Bluetooth работает только по HTTPS или localhost. Текущий URL: " + location.origin);
+                    return;
+                }
+                DBG('BLE', 'Requesting device (acceptAllDevices)...');
+                device = await navigator.bluetooth.requestDevice({
+                    acceptAllDevices: true,
+                    optionalServices: [SERVICE_UUID]
+                });
+                DBG('BLE', 'Device selected:', device.name || '(без имени)', device.id);
+                device.addEventListener('gattserverdisconnected', onDisconnected);
+                document.getElementById('connection-status').innerText = "Статус: Подключение...";
+                server = await device.gatt.connect();
+                DBG('BLE', 'GATT connected');
+                await new Promise(r => setTimeout(r, 500));
+                service = await server.getPrimaryService(SERVICE_UUID);
+                DBG('BLE', 'Service found');
+                scriptChar = await service.getCharacteristic(CHAR_SCRIPT_UUID);
+                signChar = await service.getCharacteristic(CHAR_SIGN_UUID);
+                imageChar = await service.getCharacteristic(CHAR_IMAGE_UUID);
+                streamChar = await service.getCharacteristic(CHAR_STREAM_UUID);
+                try { sensorsChar = await service.getCharacteristic(CHAR_SENSORS_UUID); } catch(e) { sensorsChar = null; }
+                try { authChar = await service.getCharacteristic(CHAR_AUTH_UUID); } catch(e) { authChar = null; }
+                try { cameraChar = await service.getCharacteristic(CHAR_CAMERA_UUID); } catch(e) { cameraChar = null; }
+                DBG('BLE', 'Characteristics OK'
+                    + (authChar ? ', auth' : '')
+                    + (cameraChar ? ', camera' : ''));
+                if (authChar) {
+                    const pwd = (document.getElementById('robot-password')?.value || '').trim();
+                    await authChar.writeValue(new TextEncoder().encode(pwd));
+                    const result = await authChar.readValue();
+                    if (result.getUint8(0) !== 1) {
+                        server.disconnect();
+                        authChar = null;
+                        throw new Error('Неверный пароль. Проверьте пароль робота.');
+                    }
+                    DBG('BLE', 'Auth OK');
+                }
+                streamChar.addEventListener('characteristicvaluechanged', onStreamData);
+                await streamChar.startNotifications();
+                signPollInterval = setInterval(() => { pollSign(); pollSensors(); }, 500);
+                document.getElementById('sensor-panel').style.display = 'block';
+                document.getElementById('connection-status').innerText = "Статус: Подключено (BLE)";
+                document.getElementById('upload-script-btn').disabled = false;
+                document.getElementById('upload-recovery-btn').disabled = false;
+                document.getElementById('connect-btn').disabled = true;
+                document.getElementById('connect-all-btn').disabled = true;
+                document.getElementById('disconnect-ble-btn').disabled = false;
+                document.getElementById('disconnect-ble-btn').style.display = 'inline-block';
+                document.getElementById('stream-toggle-btn').disabled = false;
+                initCameraControls();
+                DBG('BLE', 'Connected OK (acceptAllDevices)');
+                logToServer('INFO', 'BLE connected');
+            } catch (error) {
+                DBG_ERR('BLE', error);
+                const msg = String(error.message || error);
+                if (msg.includes('globally disabled')) {
+                    alert("Web Bluetooth отключён в Brave. Откройте brave://flags, найдите 'Web Bluetooth' или 'bluetooth', включите и перезапустите браузер.");
+                } else if (msg.includes('NotFoundError') || msg.includes('No device')) {
+                    alert("Устройства не найдены. Проверьте:\n• Робот включён и в Serial Monitor видно 'BLE Ready'\n• macOS: Системные настройки → Конфиденциальность → Bluetooth — разрешите доступ для браузера\n• Робот не подключён к другому устройству");
+                } else {
+                    alert("Ошибка: " + msg);
+                }
+            }
+        });
+
+        document.getElementById('disconnect-ble-btn').addEventListener('click', () => {
+            try {
+                if (device && device.gatt && device.gatt.connected) {
+                    device.gatt.disconnect();
+                }
+            } catch (e) {}
+        });
+
+        function onDisconnected() {
+            DBG('BLE', 'Disconnected');
+            logToServer('INFO', 'BLE disconnected');
+            if (signPollInterval) { clearInterval(signPollInterval); signPollInterval = null; }
+            server = null;
+            service = null;
+            scriptChar = null;
+            signChar = null;
+            imageChar = null;
+            streamChar = null;
+            sensorsChar = null;
+            authChar = null;
+            document.getElementById('sensor-panel').style.display = 'none';
+            ['sensor-sign','sensor-line','sensor-encoders','sensor-sharp','sensor-script-version'].forEach(id => {
+                const el = document.getElementById(id); if (el) el.innerText = '—';
+            });
+            streamActive = false;
+            document.getElementById('stream-toggle-btn').disabled = true;
+            document.getElementById('connection-status').innerText = "Статус: Отключено";
+            document.getElementById('upload-script-btn').disabled = true;
+            document.getElementById('upload-recovery-btn').disabled = true;
+            document.getElementById('connect-btn').disabled = false;
+            document.getElementById('connect-all-btn').disabled = false;
+            const db = document.getElementById('disconnect-ble-btn');
+            if (db) {
+                db.disabled = true;
+                db.style.display = 'none';
+            }
+        }
+
+        const DETECT_LABELS = ["Class0", "Class1", "Class2"];
+        const SIGN_NO_MODEL = 0xFF;
+        let signPollInterval = null;
+        let streamActive = false;
+        let streamImageBuffer = [];
+
+        function updateCameraUI(br, ct, ae, autoExp, autoGain, autoWb) {
+            const camBox = document.getElementById('camera-settings');
+            if (!camBox) return;
+            camBox.style.display = 'block';
+            const setSlider = (id, val, labelId) => {
+                const el = document.getElementById(id);
+                const lbl = document.getElementById(labelId);
+                if (el) el.value = String(val);
+                if (lbl) lbl.textContent = String(val);
+            };
+            setSlider('cam-brightness', br, 'cam-brightness-value');
+            setSlider('cam-contrast', ct, 'cam-contrast-value');
+            setSlider('cam-ae-level', ae, 'cam-ae-level-value');
+            const setChk = (id, v) => {
+                const el = document.getElementById(id);
+                if (el) el.checked = !!v;
+            };
+            setChk('cam-exposure-auto', autoExp);
+            setChk('cam-gain-auto', autoGain);
+            setChk('cam-wb-auto', autoWb);
+        }
+
+        async function sendCameraConfig() {
+            const b = parseInt(document.getElementById('cam-brightness')?.value || '0', 10);
+            const c = parseInt(document.getElementById('cam-contrast')?.value || '0', 10);
+            const ae = parseInt(document.getElementById('cam-ae-level')?.value || '0', 10);
+            const autoExp = !!document.getElementById('cam-exposure-auto')?.checked;
+            const autoGain = !!document.getElementById('cam-gain-auto')?.checked;
+            const autoWb = !!document.getElementById('cam-wb-auto')?.checked;
+            const buf = new Uint8Array(6);
+            buf[0] = b & 0xff;
+            buf[1] = c & 0xff;
+            buf[2] = ae & 0xff;
+            buf[3] = autoExp ? 1 : 0;
+            buf[4] = autoGain ? 1 : 0;
+            buf[5] = autoWb ? 1 : 0;
+            if (!cameraChar) return;
+            try {
+                await cameraChar.writeValue(buf);
+                DBG('Camera', 'Config sent', {b, c, ae, autoExp, autoGain, autoWb});
+            } catch (e) {
+                DBG_WARN('Camera', 'write fail', e);
+            }
+        }
+
+        async function initCameraControls() {
+            const camBox = document.getElementById('camera-settings');
+            if (!camBox) return;
+            let br, ct, ae, autoExp, autoGain, autoWb;
+            try {
+                if (cameraChar) {
+                    const v = await cameraChar.readValue();
+                    const dv = new DataView(v.buffer, v.byteOffset, v.byteLength);
+                    br = dv.getInt8(0);
+                    ct = dv.getInt8(1);
+                    ae = dv.getInt8(2);
+                    autoExp = !!dv.getUint8(3);
+                    autoGain = !!dv.getUint8(4);
+                    autoWb = !!dv.getUint8(5);
+                } else return;
+                updateCameraUI(br, ct, ae, autoExp, autoGain, autoWb);
+                ['cam-brightness','cam-contrast','cam-ae-level'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.addEventListener('input', () => {
+                        const labelId = id + '-value';
+                        const lbl = document.getElementById(labelId);
+                        if (lbl) lbl.textContent = String(el.value);
+                        sendCameraConfig();
+                    });
+                });
+                ['cam-exposure-auto','cam-gain-auto','cam-wb-auto'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (!el) return;
+                    el.addEventListener('change', () => { sendCameraConfig(); });
+                });
+                DBG('Camera', 'Controls ready');
+            } catch (e) {
+                DBG_WARN('Camera', 'init fail', e);
+            }
+        }
+
+        function onStreamData(event) {
+            const v = event.target?.value;
+            if (!v) return;
+            // DataView/ArrayBuffer — делаем копию, т.к. буфер может переиспользоваться
+            const val = v.buffer
+                ? new Uint8Array(v.buffer.slice(v.byteOffset || 0, (v.byteOffset || 0) + (v.byteLength || v.buffer.byteLength)))
+                : new Uint8Array(v);
+            val.forEach(b => streamImageBuffer.push(b));
+            // Маркер конца JPEG (0xFF 0xD9) может быть разбит между пакетами BLE — проверяем весь буфер
+            const buf = streamImageBuffer;
+            if (buf.length >= 2 && buf[buf.length - 1] === 0xD9 && buf[buf.length - 2] === 0xFF) {
+                const blob = new Blob([new Uint8Array(streamImageBuffer)], { type: 'image/jpeg' });
+                const url = URL.createObjectURL(blob);
+                const img = new Image();
+                img.onload = () => { if (ctx) ctx.drawImage(img, 0, 0, IMG_W, IMG_H); URL.revokeObjectURL(url); };
+                img.onerror = () => { DBG_WARN('Stream', 'JPEG decode error'); URL.revokeObjectURL(url); };
+                img.src = url;
+                streamImageBuffer = [];
+            } else if (streamImageBuffer.length > 50000) streamImageBuffer = [];
+        }
+
+        document.getElementById('stream-toggle-btn').addEventListener('click', async () => {
+            if (!imageChar) return;
+            streamActive = !streamActive;
+            DBG('Stream', streamActive ? 'Start' : 'Stop');
+            try {
+                await imageChar.writeValue(new TextEncoder().encode(streamActive ? "S1" : "S0"));
+                document.getElementById('stream-toggle-btn').innerText = streamActive ? "Остановить видео" : "Запустить видео";
+            } catch (e) { DBG_WARN('Stream', e.message); }
+        });
+
+        async function pollSign() {
+            if (!signChar) return;
+            try {
+                const v = await signChar.readValue();
+                const cls = v.getUint8(0);
+                let conf = null;
+                try {
+                    if (v.byteLength >= 2) conf = v.getUint8(1);
+                } catch(_) {}
+                const el = document.getElementById('sensor-sign');
+                if (cls === SIGN_NO_MODEL) {
+                    if (el) el.innerText = 'Модель не загружена';
+                } else if (cls < DETECT_LABELS.length) {
+                    if (el) el.innerText = conf != null ? `${DETECT_LABELS[cls]} (${conf}%)` : DETECT_LABELS[cls];
+                } else {
+                    if (el) el.innerText = '? (class ' + cls + ')';
+                }
+            } catch(e) {}
+        }
+
+        async function pollSensors() {
+            if (!sensorsChar) return;
+            try {
+                const v = await sensorsChar.readValue();
+                const buf = new Uint8Array(v.buffer, v.byteOffset, v.byteLength);
+                if (buf.length < 22) return;
+                const u16 = (buf, i) => buf[i] | (buf[i+1] << 8);
+                const u32 = (buf, i) => buf[i] | (buf[i+1]<<8) | (buf[i+2]<<16) | (buf[i+3]<<24);
+                const set = (id, txt) => { const e = document.getElementById(id); if (e) e.innerText = txt; };
+                set('sensor-line', `${u16(buf, 2)} / ${u16(buf, 4)} / ${u16(buf, 6)}`);
+                set('sensor-encoders', `${u32(buf, 8)} / ${u32(buf, 12)}`);
+                set('sensor-sharp', String(u16(buf, 18)));
+                const scriptSize = u16(buf, 16);
+                set('sensor-script-version', scriptSize > 0 ? String(scriptSize) : '—');
+            } catch(e) {}
+        }
+
+        const LABELS = ["Class0", "Class1", "Class2"];
+        window.recordSample = (classId) => {
+            canvas.toBlob((blob) => {
+                if (!blob) return;
+                dataset[classId].push(blob);
+                document.getElementById(`count-${classId}`).innerText = `${dataset[classId].length} samples`;
+                DBG('Dataset', `Record ${LABELS[classId]}: ${dataset[classId].length} total`);
+            }, 'image/png');
+        };
+
+        window.clearDataset = () => {
+            for(let k in dataset) dataset[k] = [];
+            for(let i=0; i<=2; i++) document.getElementById(`count-${i}`).innerText = "0 samples";
+            DBG('Dataset', 'Cleared');
+        };
+
+        window.downloadDatasetZip = () => { downloadDataset().then(c => c && saveAs(c, "robot_dataset.zip")); };
+
+        window.downloadDataset = () => {
+            const zip = new JSZip();
+            const labels = ["0_Class0", "1_Class1", "2_Class2"];
+            let hasData = false;
+            for (let i = 0; i < 3; i++) {
+                const folder = zip.folder(labels[i]);
+                dataset[i].forEach((blob, idx) => {
+                    const ext = (blob.type === 'image/jpeg') ? 'jpg' : 'png';
+                    folder.file(`sample_${idx}.${ext}`, blob);
+                    hasData = true;
+                });
+            }
+            if (!hasData) { DBG_WARN('Dataset', 'No samples'); alert("No samples recorded!"); return null; }
+            return zip.generateAsync({type:"blob"});
+        };
+
+        let trainedModelBlob = null;
+
+        document.getElementById('train-server-btn').addEventListener('click', async () => {
+            const zipBlob = await window.downloadDataset();
+            if (!zipBlob) return;
+            const status = document.getElementById('train-status');
+            status.innerText = "Загрузка данных на сервер...";
+            const formData = new FormData();
+            formData.append('dataset', zipBlob, 'dataset.zip');
+            try {
+                status.innerText = "Обучение модели на сервере... (может занять минуту)";
+                const response = await fetch('/train', { method: 'POST', body: formData });
+                if (!response.ok) { const err = await response.json(); throw new Error(err.error || "Server Error"); }
+                status.innerText = "Обучение завершено! Скачивание модели...";
+                trainedModelBlob = await response.blob();
+                status.innerText = "Модель готова! Скачайте файл ниже.";
+                status.style.color = "green";
+                const dl = document.getElementById('download-model-link');
+                dl.style.display = 'inline';
+                dl.href = URL.createObjectURL(trainedModelBlob);
+                dl.download = 'model.tflite';
+                logToServer('INFO', `Train done: model ${trainedModelBlob.size} bytes`);
+            } catch (e) {
+                DBG_ERR('Train', e);
+                status.innerText = "Ошибка: " + e.message;
+                status.style.color = "red";
+            }
+        });
+
+        const RECOVERY_SCRIPT = `def run_robot(bot):
+    bot.motors.stop()
+    print("Recovery - robot stopped")
+    while True:
+        yield bot.sleep(1)
+`;
+
+        async function uploadScriptToRobot(script, skipValidation = false) {
+            const statusEl = document.getElementById('script-upload-status');
+            const progressEl = document.getElementById('script-upload-progress');
+            const msgEl = document.getElementById('script-upload-msg');
+            const btn = document.getElementById('upload-script-btn');
+            const recoveryBtn = document.getElementById('upload-recovery-btn');
+            statusEl.style.display = 'block';
+            statusEl.classList.remove('success', 'error');
+            progressEl.style.width = '0%';
+            btn.disabled = true;
+            if (recoveryBtn) recoveryBtn.disabled = true;
+            if (!scriptChar || !device || !device.gatt || !device.gatt.connected) {
+                statusEl.classList.add('error');
+                progressEl.style.width = '100%';
+                msgEl.textContent = '✗ Подключение потеряно. Переподключитесь к роботу и попробуйте снова.';
+                btn.disabled = false;
+                if (recoveryBtn) recoveryBtn.disabled = false;
+                return;
+            }
+            if (!skipValidation) {
+                msgEl.textContent = 'Проверка скрипта...';
+                try {
+                    const validateRes = await fetch('/api/validate-script', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({script})
+                    });
+                    const validateData = await validateRes.json();
+                    if (!validateData.valid) {
+                        statusEl.classList.add('error');
+                        progressEl.style.width = '100%';
+                        msgEl.textContent = '✗ ' + (validateData.error || 'Ошибка проверки');
+                        btn.disabled = false;
+                        if (recoveryBtn) recoveryBtn.disabled = false;
+                        return;
+                    }
+                } catch(e) {
+                    statusEl.classList.add('error');
+                    progressEl.style.width = '100%';
+                    msgEl.textContent = '✗ Ошибка проверки: ' + (e.message || e);
+                    btn.disabled = false;
+                    if (recoveryBtn) recoveryBtn.disabled = false;
+                    return;
+                }
+            }
+            msgEl.textContent = 'Подготовка...';
+            try {
+                if (streamActive && imageChar) {
+                    try { await imageChar.writeValue(new TextEncoder().encode("S0")); } catch(_) {}
+                    streamActive = false;
+                    const stb = document.getElementById('stream-toggle-btn'); if (stb) stb.innerText = 'Запустить видео';
+                }
+                msgEl.textContent = 'Отправка команды START...';
+                await scriptChar.writeValue(new TextEncoder().encode("START"));
+                const chunkSize = 80;
+                for (let i = 0; i < script.length; i += chunkSize) {
+                    if (!device.gatt.connected) throw new Error('Подключение потеряно');
+                    const chunk = script.substring(i, i + chunkSize);
+                    await scriptChar.writeValue(new TextEncoder().encode(chunk));
+                    const pct = Math.round(((i + chunk.length) / script.length) * 100);
+                    progressEl.style.width = pct + '%';
+                    msgEl.textContent = `Отправка: ${pct}% (${Math.min(i + chunkSize, script.length)} / ${script.length} байт)`;
+                    await new Promise(r => setTimeout(r, 60));
+                }
+                msgEl.textContent = 'Отправка EOF...';
+                await scriptChar.writeValue(new TextEncoder().encode("EOF"));
+                progressEl.style.width = '100%';
+                statusEl.classList.add('success');
+                msgEl.textContent = skipValidation ? '✓ Скрипт восстановления загружен! Робот остановлен.' : '✓ Скрипт загружен! ESP32 подхватит его через I2C в течение ~5 сек.';
+                logToServer('INFO', `Script uploaded: ${script.length} bytes` + (skipValidation ? ' (recovery)' : ''));
+                setTimeout(() => { statusEl.style.display = 'none'; }, 5000);
+            } catch(e) {
+                DBG_ERR('Script', e);
+                statusEl.classList.add('error');
+                progressEl.style.width = '100%';
+                const msg = (e.message || String(e));
+                const isGatt = /GATT|no longer exists|disconnected/i.test(msg);
+                msgEl.textContent = isGatt
+                    ? '✗ Подключение потеряно. Переподключитесь к роботу и попробуйте снова.'
+                    : ('✗ Ошибка: ' + msg);
+                logToServer('ERR', 'Script upload failed: ' + e);
+            }
+            btn.disabled = false;
+            if (recoveryBtn) recoveryBtn.disabled = false;
+        }
+
+        document.getElementById('upload-recovery-btn').addEventListener('click', async () => {
+            if (!scriptChar) return;
+            await uploadScriptToRobot(RECOVERY_SCRIPT, true);
+        });
+
+        document.getElementById('upload-script-btn').addEventListener('click', async () => {
+            if (!scriptChar) return;
+            const script = document.getElementById('script-area').value.trim();
+            if (!script) {
+                alert('Скрипт пуст. Загрузите или введите код в блоке выше.');
+                return;
+            }
+            await uploadScriptToRobot(script, false);
+        });
+    </script>
+</body>
+</html>
