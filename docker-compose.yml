@@ -1,0 +1,9 @@
+services:
+  robot-server:
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+    ports:
+      - "8085:8085"
+    volumes:
+      - ./web/dataset:/app/dataset
