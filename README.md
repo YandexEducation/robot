@@ -1,15 +1,31 @@
 
+## WEB интерфейс
 Откройте: http://localhost:8085
+
+
+
+
+
+
 
 ## Загрузка модели на робота (Type-c)
 
+1. Найти робота подключенного по USB
+
+ищем имя, должно содержать слово modem. Пример /dev/cu.usbmodem14301 (в конце могут быть разные цифры, зависит от порта подключения)
 ```bash
-python3 tools/upload_model.py -p PORT model.tflite
+ls -l /dev/cu.*
 ```
 
-- MacOS: `-p /dev/cu.usbmodem*` (например `/dev/cu.usbmodem1101`)
-
-Пример: `python3 tools/upload_model.py -p /dev/cu.usbmodem1101 /path/to/model.tflite`
+2. Скачиваем модель, имеет имя model.tffile, по умолчанию сохраняется /User/eventya/Downloads/model.tffile. Внимательно смотрите на имя скачанной модели.
 
 
-Примеры работы с сенсорами робота в директории `examples`
+3. загружаем модель на робота. После флага -p указываем имя из 1 пункта, после имени через пробел указываем путь к файлу модели.
+```bash
+python3 tools/upload_model.py -p /dev/cu.usbmodem1101 /User/eventya/Downloads/model.tflite
+```
+
+
+
+
+## Примеры работы с каждым сенсором и моторами лежат в директории `examples`. Настоятельно рекумендую ознакомиться 
